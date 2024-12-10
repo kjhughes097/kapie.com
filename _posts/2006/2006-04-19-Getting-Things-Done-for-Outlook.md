@@ -497,4 +497,3 @@ Private Function CreateMAPIFolder(ByVal sFolder As String) As Boolean
 End Function
 
 [modGTD.bas (12.72 KB)](https://kapie.com/content/binary/modGTD.bas)  
-[guidessay.com](http://guidessay.com/essay-help/)

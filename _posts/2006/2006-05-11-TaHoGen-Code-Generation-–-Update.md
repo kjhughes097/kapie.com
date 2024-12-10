@@ -20,5 +20,3 @@ I rewrote the VS2005 addin so that instead of the UI being a ‘non integrated�
 ![](tahogen5.jpeg)
 
 Expect to see details of the sourceforge project name and possibly a CodeProject article from Philip soon...
-
-[рулетка для android](http://lucky-larry.com/)

@@ -24,5 +24,3 @@ The url for the feed includes the category id for the artciles you want to see. 
 [http://\[your\_domain\]/rss/index.php?\_m=knowledgebase&\_a=view&kbcategoryid=0](http://[your_domain]/rss/index.php?_m=knowledgebase&_a=view&kbcategoryid=0)
 
 [Link](http://forums.kayako.com/showthread.php?t=7329 "Kayako Forum post") to the post I entered on the Kayako forums
-
-[scholarship essay writing](http://essayyoda.com/write-my-essay/)
