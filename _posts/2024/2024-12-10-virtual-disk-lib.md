@@ -25,3 +25,5 @@ I'll take an iterative approach. Major steps will be:
   - Differencing VHDX
 
 Links to the updates / articles will appear below.
+
+- [Setting up the workflow to generate the README.md](/virtual-disk-lib-workflow)
