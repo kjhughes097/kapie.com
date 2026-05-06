@@ -1,0 +1,179 @@
+---
+layout: null
+---
+
+#!/bin/bash
+set -e
+
+echo "=== Setting up environment ==="
+
+mkdir -p "$HOME/.kh"
+
+# Create ~/.kh/.aliases
+cat > "$HOME/.kh/.aliases" << 'EOF'
+# basics
+alias ll='ls -alF'
+alias install='sudo apt-get install -y'
+alias purge='sudo apt-get remove --purge'
+alias reinstall='sudo apt-get install --reinstall'
+alias remove='sudo apt-get remove'
+alias aremove='sudo apt-get autoremove'
+alias search='apt-cache search'
+alias show='apt-cache show'
+alias update='sudo apt-get update'
+alias upgrade='sudo apt-get upgrade'
+alias watch='watch '
+alias xargs='xargs '
+alias myip='echo $(curl -s ifconfig.me)'
+
+# misc
+alias lsa='alias'
+alias lsag='alias | grep $1'
+alias lsf='compgen -A function | grep "^[a-z]\+" | grep -vE "^dequote|^quote|^in_array|^command_not_found_handle"'
+alias lsfg='declare -f | grep $1'
+alias ping='ping -c 5'
+alias mkdir='mkdir -pv'
+
+alias dnc='dotnet clean '
+alias dnb='dotnet build '
+alias dnf='dotnet format '
+alias dnr='dotnet run '
+alias dt='dotnet test '
+alias clean='find . -type d -iname bin -prune -exec rm -rf {} \; && find . -type d -iname obj -prune -exec rm -rf {} \;'
+
+# while I learn the git aliases in OMZ
+alias lsg='alias | grep git'
+
+# some backup stuff
+alias mount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' ' -f 1 | xargs -I{} sudo mount /dev/disk/by-uuid/{} /backups'
+alias unmount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' '' -f 1 | xargs -I{} sudo umount /dev/disk/by-uuid/{}'
+
+alias ae='code -n ~/projects/ansible'
+alias ou=`omz update`
+EOF
+echo "  Created ~/.kh/.aliases"
+
+# Create ~/.kh/.exports
+cat > "$HOME/.kh/.exports" << 'EOF'
+
+# path stuff
+export PATH=$PATH:$HOME/.dotnet:$HOME/.local/bin:$HOME/go/bin
+
+# editor
+export EDITOR=nano
+
+# Install Ruby Gems to ~/gems' >> ~/.bashrc
+export GEM_HOME="$HOME/gems"
+export PATH="$HOME/gems/bin:$PATH"
+
+# Go path
+export PATH="$PATH:/usr/local/go/bin"
+
+export TERM=xterm-256color
+
+#GPG
+export GPG_KEY=$(tty)
+export GPG_TTY=$(tty)
+EOF
+echo "  Created ~/.kh/.exports"
+
+# Create ~/.kh/.functions
+cat > "$HOME/.kh/.functions" << 'EOF'
+#!/bin/bash
+
+function gitnb { git checkout -b $1 && git push -u origin $1; }
+
+function lsh {
+    fc -lim "*$@*" 1
+}
+
+# command line calc
+function =
+{
+  echo "$@" | bc -l
+}
+alias calc="="
+
+function epoch {
+    if [ $# -eq 1 ]; then
+        date --date="$1" +%s
+    else
+        date +%s
+    fi
+}
+
+function b64d()
+{
+    ENC_STR=$1
+    if [[ $1 = grid-* ]]; then
+        ENC_STR=${ENC_STR:5}
+    fi
+    DEC_STR=$(echo "$ENC_STR" | base64 -d 2>/dev/null)
+    if [[ $DEC_STR = *invalid ]]; then
+        DEC_STR=$(echo "$ENC_STR=" | base64 -d 2>/dev/null)
+    fi
+    if [[ $DEC_STR = *invalid ]]; then
+        DEC_STR=$(echo "$ENC_STR==" | base64 -d)
+    fi
+    echo ""
+    echo "$DEC_STR"
+}
+
+function d64()
+{
+    b64d $1
+}
+EOF
+echo "  Created ~/.kh/.functions"
+
+# Add 'kh' alias to shell rc files
+KH_ALIAS="alias kh='source \$HOME/.kh/.exports && source \$HOME/.kh/.aliases && source \$HOME/.kh/.functions'"
+for RC_FILE in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$RC_FILE" ]; then
+        if ! grep -q "alias kh=" "$RC_FILE" 2>/dev/null; then
+            echo "" >> "$RC_FILE"
+            echo "$KH_ALIAS" >> "$RC_FILE"
+            echo "  Added 'kh' alias to $(basename $RC_FILE)"
+        fi
+    fi
+done
+
+# Ask about work aliases (encrypted bundle)
+echo ""
+read -p "Do you also want to install WORK aliases? [y/N] " -n 1 -r < /dev/tty
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    read -s -p "Enter decryption password: " WORK_PASS < /dev/tty
+    echo ""
+
+    # Encrypted work aliases (openssl aes-256-cbc, pbkdf2, base64-encoded)
+    WORK_ALIASES_ENC="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"
+
+    # Encrypted work functions (openssl aes-256-cbc, pbkdf2, base64-encoded)
+    WORK_FUNCTIONS_ENC="U2FsdGVkX1+cJQ4vY9248IZtCCErcdLchyp5WeFrdx4pUJVrsn41HYOPfUwjExuzBo5CGfekXv7LWSdhGrbOPOj7uBZjGh4YLrEnwHB1xEBe3jhmz5mzeh/Iss859G0lS1TB0T1HMA96u5CV1T6DGJdSSgsjMjoTrMK68V+FsL/eOnui7cD/ObTuTl7u8YmchS+jRggnt8pHmPhQKgejJGzYNmEnJ7Bnulqa41ciHI+cff3OyecZw943IgilQEnp98nIdrkaAzQsvrrr2q/VqgGJTrNAxK7Cx75caIV2HIvrq36WNJS4cWbFNy3kyjQyhgdjOjkpSFOpJNx5VdhaENc+Clp59q92P/gdjN4Dxv4TDopU97yEjia/j3rosfgkFVxnTXEbxs9ywm+pR9n8zN7tBSl6uFOYx/POxWyAfqGT4QjzzjNb+qX/dsseHhR7mJ+5yrBu/TX28G2z6u/iZhZ4vKYbzQbzbU2DgBxduN7tUbMbJ2upEy/UcgMjDBDp+2+5KmnYAmiOF0VGFkBK6wQn3peWLSYd5DGZ/79LvxNZNnSdRQx2U8m4eYXC5ka3YcvR1Y/Tiv7UE9K/G7Rb1HSZWSzQBm139XbUDEPN+Q2cHHnaWK4f3FX/zIPcKXgWRbe8JHY9rVyhHFqpcpEvBwhalhf+cBMM8Qz/H+59zKmUn1YfAFqjdLd5VnHg3CPbzfc+yc9qHNV8Y8fdu+KYevV02yA+YTteTI2ZVoSohi0+M/fVOLW8mGW23mtJJqLfwsbUvbBqvL4WbR48xLXF+3ar1hVhZqiuBKAJa2wJgAIY+/QNAXqmwU/CaDinQB+R5LKRsPcvAALr8aswftnvYt1Q0zOdMsbYbKLq0ccpc98F8tbYK3/6bu01+oLXGnsbFXwMLv1gsnx+5/THPlt42aKY5x/9owf/Tqqxsov2i882dlkXGtQFxapH3M4hPLvz"
+
+    # Decrypt and append
+    DECRYPTED_ALIASES=$(echo "$WORK_ALIASES_ENC" | base64 -d | openssl enc -aes-256-cbc -d -pbkdf2 -pass pass:"$WORK_PASS" 2>/dev/null)
+    if [ $? -ne 0 ]; then
+        echo "  ERROR: Decryption failed. Wrong password?"
+    else
+        echo "" >> "$HOME/.kh/.aliases"
+        echo "$DECRYPTED_ALIASES" >> "$HOME/.kh/.aliases"
+        echo "  Added work aliases"
+
+        DECRYPTED_FUNCTIONS=$(echo "$WORK_FUNCTIONS_ENC" | base64 -d | openssl enc -aes-256-cbc -d -pbkdf2 -pass pass:"$WORK_PASS" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            echo "" >> "$HOME/.kh/.functions"
+            echo "$DECRYPTED_FUNCTIONS" >> "$HOME/.kh/.functions"
+            echo "  Added work functions"
+        fi
+    fi
+
+    unset WORK_PASS DECRYPTED_ALIASES DECRYPTED_FUNCTIONS
+fi
+
+echo ""
+echo "=== Done! ==="
+echo "Type 'kh' (or open a new shell first) to activate your environment."
