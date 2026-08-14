@@ -46,10 +46,10 @@ alias lsg='alias | grep git'
 
 # some backup stuff
 alias mount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' ' -f 1 | xargs -I{} sudo mount /dev/disk/by-uuid/{} /backups'
-alias unmount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' '' -f 1 | xargs -I{} sudo umount /dev/disk/by-uuid/{}'
+alias unmount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' ' -f 1 | xargs -I{} sudo umount /dev/disk/by-uuid/{}'
 
 alias ae='code -n ~/projects/ansible'
-alias ou=`omz update`
+alias ou='omz update'
 EOF
 echo "  Created ~/.kh/.aliases"
 
