@@ -10,7 +10,7 @@ echo "=== Setting up environment ==="
 mkdir -p "$HOME/.kh"
 
 # Create ~/.kh/.aliases
-cat > "$HOME/.kh/.aliases" << 'EOF'
+cat > "$HOME/.kh/.aliases" << EOF
 # basics
 alias ll='ls -alF'
 alias install='sudo apt-get install -y'
@@ -38,36 +38,22 @@ alias dnc='dotnet clean '
 alias dnb='dotnet build '
 alias dnf='dotnet format '
 alias dnr='dotnet run '
-alias dt='dotnet test '
+alias dnt='dotnet test '
+alias dn='dotnet '
 alias clean='find . -type d -iname bin -prune -exec rm -rf {} \; && find . -type d -iname obj -prune -exec rm -rf {} \;'
 
-# while I learn the git aliases in OMZ
-alias lsg='alias | grep git'
-
-# some backup stuff
-alias mount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' ' -f 1 | xargs -I{} sudo mount /dev/disk/by-uuid/{} /backups'
-alias unmount-disk='lsblk -ouuid,name,size,type,mountpoint | grep -v loop | fzf --reverse | cut -d ' ' -f 1 | xargs -I{} sudo umount /dev/disk/by-uuid/{}'
-
-alias ae='code -n ~/projects/ansible'
 alias ou='omz update'
 EOF
 echo "  Created ~/.kh/.aliases"
 
 # Create ~/.kh/.exports
-cat > "$HOME/.kh/.exports" << 'EOF'
+cat > "$HOME/.kh/.exports" << EOF
 
 # path stuff
-export PATH=$PATH:$HOME/.dotnet:$HOME/.local/bin:$HOME/go/bin
+export PATH=$PATH:$HOME/.dotnet:$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin
 
 # editor
 export EDITOR=nano
-
-# Install Ruby Gems to ~/gems' >> ~/.bashrc
-export GEM_HOME="$HOME/gems"
-export PATH="$HOME/gems/bin:$PATH"
-
-# Go path
-export PATH="$PATH:/usr/local/go/bin"
 
 export TERM=xterm-256color
 
@@ -78,7 +64,7 @@ EOF
 echo "  Created ~/.kh/.exports"
 
 # Create ~/.kh/.functions
-cat > "$HOME/.kh/.functions" << 'EOF'
+cat > "$HOME/.kh/.functions" << EOF
 #!/bin/bash
 
 function gitnb { git checkout -b $1 && git push -u origin $1; }
@@ -86,13 +72,6 @@ function gitnb { git checkout -b $1 && git push -u origin $1; }
 function lsh {
     fc -lim "*$@*" 1
 }
-
-# command line calc
-function =
-{
-  echo "$@" | bc -l
-}
-alias calc="="
 
 function epoch {
     if [ $# -eq 1 ]; then
@@ -102,7 +81,7 @@ function epoch {
     fi
 }
 
-function b64d()
+function d64()
 {
     ENC_STR=$1
     if [[ $1 = grid-* ]]; then
@@ -119,10 +98,6 @@ function b64d()
     echo "$DEC_STR"
 }
 
-function d64()
-{
-    b64d $1
-}
 EOF
 echo "  Created ~/.kh/.functions"
 
@@ -177,3 +152,6 @@ fi
 echo ""
 echo "=== Done! ==="
 echo "Type 'kh' (or open a new shell first) to activate your environment."
+echo ""
+
+sudo usermod -aG docker $USER
