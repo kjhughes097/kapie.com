@@ -154,4 +154,4 @@ echo "=== Done! ==="
 echo "Type 'kh' (or open a new shell first) to activate your environment."
 echo ""
 
-sudo usermod -aG docker $USER
+echo "To add user to docker group, use: sudo usermod -aG docker $USER"
