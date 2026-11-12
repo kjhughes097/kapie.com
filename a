@@ -1,16 +1,14 @@
----
-layout: null
----
-
-#!/bin/bash
+#!/bin/sh
 set -e
 
 echo "=== Setting up environment ==="
 
+umask 077
 mkdir -p "$HOME/.kh"
+chmod 700 "$HOME/.kh"
 
 # Create ~/.kh/.aliases
-cat > "$HOME/.kh/.aliases" << EOF
+cat > "$HOME/.kh/.aliases" << 'EOF'
 # basics
 alias ll='ls -alF'
 alias install='sudo apt-get install -y'
@@ -24,13 +22,10 @@ alias update='sudo apt-get update'
 alias upgrade='sudo apt-get upgrade'
 alias watch='watch '
 alias xargs='xargs '
-alias myip='echo $(curl -s ifconfig.me)'
+alias myip='curl -fsS ifconfig.me'
 
 # misc
 alias lsa='alias'
-alias lsag='alias | grep $1'
-alias lsf='compgen -A function | grep "^[a-z]\+" | grep -vE "^dequote|^quote|^in_array|^command_not_found_handle"'
-alias lsfg='declare -f | grep $1'
 alias ping='ping -c 5'
 alias mkdir='mkdir -pv'
 
@@ -47,10 +42,17 @@ EOF
 echo "  Created ~/.kh/.aliases"
 
 # Create ~/.kh/.exports
-cat > "$HOME/.kh/.exports" << EOF
+cat > "$HOME/.kh/.exports" << 'EOF'
 
 # path stuff
-export PATH=$PATH:$HOME/.dotnet:$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin
+for kh_path in "$HOME/.dotnet" "$HOME/.local/bin" "$HOME/go/bin" /usr/local/go/bin; do
+    case ":$PATH:" in
+        *":$kh_path:"*) ;;
+        *) PATH="$PATH:$kh_path" ;;
+    esac
+done
+unset kh_path
+export PATH
 
 # editor
 export EDITOR=nano
@@ -58,22 +60,43 @@ export EDITOR=nano
 export TERM=xterm-256color
 
 #GPG
-export GPG_KEY=$(tty)
-export GPG_TTY=$(tty)
+if [ -t 0 ]; then
+    GPG_KEY=$(tty)
+    GPG_TTY=$GPG_KEY
+    export GPG_KEY GPG_TTY
+fi
 EOF
 echo "  Created ~/.kh/.exports"
 
 # Create ~/.kh/.functions
-cat > "$HOME/.kh/.functions" << EOF
-#!/bin/bash
+cat > "$HOME/.kh/.functions" << 'EOF'
+for kh_alias in lsag lsf lsfg; do
+    if alias "$kh_alias" >/dev/null 2>&1; then
+        unalias "$kh_alias"
+    fi
+done
+unset kh_alias
 
-function gitnb { git checkout -b $1 && git push -u origin $1; }
+gitnb() { git checkout -b "$1" && git push -u origin "$1"; }
 
-function lsh {
-    fc -lim "*$@*" 1
+lsag() { alias | grep -F -- "$1"; }
+
+lsf() {
+    if [ -n "${BASH_VERSION:-}" ]; then
+        compgen -A function | grep '^[a-z]' | grep -vE '^(dequote|quote|in_array|command_not_found_handle)'
+    elif [ -n "${ZSH_VERSION:-}" ]; then
+        typeset -f | grep '^[a-z][a-zA-Z0-9_]* () {' | sed 's/ () {.*//'
+    else
+        echo "lsf requires Bash or Zsh" >&2
+        return 1
+    fi
 }
 
-function epoch {
+lsfg() { lsf | grep -F -- "$1"; }
+
+lsh() { fc -l 1 | grep -F -- "$*"; }
+
+epoch() {
     if [ $# -eq 1 ]; then
         date --date="$1" +%s
     else
@@ -81,77 +104,167 @@ function epoch {
     fi
 }
 
-function d64()
-{
-    ENC_STR=$1
-    if [[ $1 = grid-* ]]; then
-        ENC_STR=${ENC_STR:5}
-    fi
-    DEC_STR=$(echo "$ENC_STR" | base64 -d 2>/dev/null)
-    if [[ $DEC_STR = *invalid ]]; then
-        DEC_STR=$(echo "$ENC_STR=" | base64 -d 2>/dev/null)
-    fi
-    if [[ $DEC_STR = *invalid ]]; then
-        DEC_STR=$(echo "$ENC_STR==" | base64 -d)
-    fi
-    echo ""
-    echo "$DEC_STR"
-}
+d64() (
+    enc_str=${1#grid-}
+    dec_str=$(printf '%s' "$enc_str" | base64 -d 2>/dev/null) ||
+        dec_str=$(printf '%s=' "$enc_str" | base64 -d 2>/dev/null) ||
+        dec_str=$(printf '%s==' "$enc_str" | base64 -d) || return 1
+    printf '\n%s\n' "$dec_str"
+)
 
 EOF
 echo "  Created ~/.kh/.functions"
 
-# Add 'kh' alias to shell rc files
-KH_ALIAS="alias kh='source \$HOME/.kh/.exports && source \$HOME/.kh/.aliases && source \$HOME/.kh/.functions'"
-for RC_FILE in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    if [ -f "$RC_FILE" ]; then
-        if ! grep -q "alias kh=" "$RC_FILE" 2>/dev/null; then
-            echo "" >> "$RC_FILE"
-            echo "$KH_ALIAS" >> "$RC_FILE"
-            echo "  Added 'kh' alias to $(basename $RC_FILE)"
-        fi
+# Files are shared by POSIX shells; keep this entry point usable with `.`.
+cat > "$HOME/.kh/init" << 'EOF'
+. "$HOME/.kh/.exports"
+. "$HOME/.kh/.aliases"
+. "$HOME/.kh/.functions"
+EOF
+chmod 600 "$HOME/.kh/.exports" "$HOME/.kh/.aliases" "$HOME/.kh/.functions" "$HOME/.kh/init"
+
+ZSH_RC="${ZDOTDIR:-$HOME}/.zshrc"
+for RC_FILE in "$HOME/.profile" "$HOME/.bashrc"; do
+    if ! [ -f "$RC_FILE" ] || ! grep -Fqx '. "$HOME/.kh/init" # kh environment' "$RC_FILE"; then
+        printf '\n%s\n' '. "$HOME/.kh/init" # kh environment' >> "$RC_FILE"
+        echo "  Enabled environment in $(basename "$RC_FILE")"
     fi
 done
 
-# Ask about work aliases (encrypted bundle)
-echo ""
-read -p "Do you also want to install WORK aliases? [y/N] " -n 1 -r < /dev/tty
-echo ""
+HAVE_TTY=no
+if [ -t 2 ] && ( : < /dev/tty ) 2>/dev/null; then
+    HAVE_TTY=yes
+fi
 
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo ""
-    read -s -p "Enter decryption password: " WORK_PASS < /dev/tty
-    echo ""
+MISSING=
+for DEPENDENCY in zsh git; do
+    if ! command -v "$DEPENDENCY" >/dev/null 2>&1; then
+        MISSING="$MISSING $DEPENDENCY"
+    fi
+done
 
-    # Encrypted work aliases (openssl aes-256-cbc, pbkdf2, base64-encoded)
-    WORK_ALIASES_ENC="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"
+if [ -n "$MISSING" ]; then
+    echo "Oh My Zsh requires missing dependencies:$MISSING" >&2
+    INSTALL_REPLY=
+    if [ "$HAVE_TTY" = yes ]; then
+        printf 'Install missing dependencies using the system package manager? [y/N] ' > /dev/tty
+        IFS= read -r INSTALL_REPLY < /dev/tty || INSTALL_REPLY=
+    fi
+    case "$INSTALL_REPLY" in
+        [Yy]|[Yy][Ee][Ss])
+            if [ "$(id -u)" -eq 0 ]; then
+                SUDO=
+            elif command -v sudo >/dev/null 2>&1; then
+                SUDO=sudo
+            else
+                echo "ERROR: sudo is required to install dependencies." >&2
+                exit 1
+            fi
+            if command -v apt-get >/dev/null 2>&1; then
+                $SUDO apt-get update < /dev/tty
+                # MISSING contains only the fixed package names above.
+                $SUDO apt-get install -y $MISSING < /dev/tty
+            elif command -v dnf >/dev/null 2>&1; then
+                $SUDO dnf install -y $MISSING < /dev/tty
+            elif command -v apk >/dev/null 2>&1; then
+                $SUDO apk add $MISSING < /dev/tty
+            else
+                echo "ERROR: No supported package manager found; install$MISSING manually." >&2
+                exit 1
+            fi
+            for DEPENDENCY in $MISSING; do
+                if ! command -v "$DEPENDENCY" >/dev/null 2>&1; then
+                    echo "ERROR: $DEPENDENCY is still unavailable after installation." >&2
+                    exit 1
+                fi
+            done
+            MISSING=
+            ;;
+        *) echo "Oh My Zsh was not installed; install$MISSING and rerun this script." >&2 ;;
+    esac
+fi
 
-    # Encrypted work functions (openssl aes-256-cbc, pbkdf2, base64-encoded)
-    WORK_FUNCTIONS_ENC="U2FsdGVkX1+cJQ4vY9248IZtCCErcdLchyp5WeFrdx4pUJVrsn41HYOPfUwjExuzBo5CGfekXv7LWSdhGrbOPOj7uBZjGh4YLrEnwHB1xEBe3jhmz5mzeh/Iss859G0lS1TB0T1HMA96u5CV1T6DGJdSSgsjMjoTrMK68V+FsL/eOnui7cD/ObTuTl7u8YmchS+jRggnt8pHmPhQKgejJGzYNmEnJ7Bnulqa41ciHI+cff3OyecZw943IgilQEnp98nIdrkaAzQsvrrr2q/VqgGJTrNAxK7Cx75caIV2HIvrq36WNJS4cWbFNy3kyjQyhgdjOjkpSFOpJNx5VdhaENc+Clp59q92P/gdjN4Dxv4TDopU97yEjia/j3rosfgkFVxnTXEbxs9ywm+pR9n8zN7tBSl6uFOYx/POxWyAfqGT4QjzzjNb+qX/dsseHhR7mJ+5yrBu/TX28G2z6u/iZhZ4vKYbzQbzbU2DgBxduN7tUbMbJ2upEy/UcgMjDBDp+2+5KmnYAmiOF0VGFkBK6wQn3peWLSYd5DGZ/79LvxNZNnSdRQx2U8m4eYXC5ka3YcvR1Y/Tiv7UE9K/G7Rb1HSZWSzQBm139XbUDEPN+Q2cHHnaWK4f3FX/zIPcKXgWRbe8JHY9rVyhHFqpcpEvBwhalhf+cBMM8Qz/H+59zKmUn1YfAFqjdLd5VnHg3CPbzfc+yc9qHNV8Y8fdu+KYevV02yA+YTteTI2ZVoSohi0+M/fVOLW8mGW23mtJJqLfwsbUvbBqvL4WbR48xLXF+3ar1hVhZqiuBKAJa2wJgAIY+/QNAXqmwU/CaDinQB+R5LKRsPcvAALr8aswftnvYt1Q0zOdMsbYbKLq0ccpc98F8tbYK3/6bu01+oLXGnsbFXwMLv1gsnx+5/THPlt42aKY5x/9owf/Tqqxsov2i882dlkXGtQFxapH3M4hPLvz"
-
-    # Decrypt and append
-    DECRYPTED_ALIASES=$(echo "$WORK_ALIASES_ENC" | base64 -d | openssl enc -aes-256-cbc -d -pbkdf2 -pass pass:"$WORK_PASS" 2>/dev/null)
-    if [ $? -ne 0 ]; then
-        echo "  ERROR: Decryption failed. Wrong password?"
+if [ -z "$MISSING" ]; then
+    if [ ! -e "$HOME/.oh-my-zsh" ]; then
+        echo "Installing Oh My Zsh..."
+        git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh"
+    fi
+    if [ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
+        echo "ERROR: $HOME/.oh-my-zsh exists but is not a valid Oh My Zsh installation." >&2
+        exit 1
+    fi
+    cat > "$HOME/.kh/theme.zsh" << 'EOF'
+prompt_colour() {
+    if [[ -n ${SSH_TTY:-} ]]; then
+        echo "10"
     else
-        echo "" >> "$HOME/.kh/.aliases"
-        echo "$DECRYPTED_ALIASES" >> "$HOME/.kh/.aliases"
-        echo "  Added work aliases"
+        echo "226"
+    fi
+}
 
-        DECRYPTED_FUNCTIONS=$(echo "$WORK_FUNCTIONS_ENC" | base64 -d | openssl enc -aes-256-cbc -d -pbkdf2 -pass pass:"$WORK_PASS" 2>/dev/null)
-        if [ $? -eq 0 ]; then
-            echo "" >> "$HOME/.kh/.functions"
-            echo "$DECRYPTED_FUNCTIONS" >> "$HOME/.kh/.functions"
-            echo "  Added work functions"
+setopt prompt_subst
+PROMPT='%F{$(prompt_colour)}%n@%m%f %D{%T} %2~ $(git_prompt_info) # '
+ZSH_THEME_GIT_PROMPT_PREFIX="%B%F{124}["
+ZSH_THEME_GIT_PROMPT_SUFFIX="]%f%b"
+ZSH_THEME_GIT_PROMPT_DIRTY="*"
+ZSH_THEME_GIT_PROMPT_CLEAN=""
+EOF
+    chmod 600 "$HOME/.kh/theme.zsh"
+    if ! [ -f "$ZSH_RC" ] || ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*oh-my-zsh\.sh' "$ZSH_RC"; then
+        cat >> "$ZSH_RC" << 'EOF'
+
+# Oh My Zsh
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="${ZSH_THEME:-robbyrussell}"
+source "$ZSH/oh-my-zsh.sh"
+EOF
+        if grep -Fqx '. "$HOME/.kh/init" # kh environment' "$ZSH_RC"; then
+            printf '%s\n' '. "$HOME/.kh/init" # kh environment after Oh My Zsh' >> "$ZSH_RC"
         fi
+        echo "  Enabled Oh My Zsh in $ZSH_RC"
+    fi
+    if ! grep -Fqx '. "$HOME/.kh/theme.zsh" # kh theme' "$ZSH_RC"; then
+        printf '\n%s\n' '. "$HOME/.kh/theme.zsh" # kh theme' >> "$ZSH_RC"
+        echo "  Enabled custom theme in $ZSH_RC"
     fi
 
-    unset WORK_PASS DECRYPTED_ALIASES DECRYPTED_FUNCTIONS
+    SHELL_REPLY=
+    if [ "$HAVE_TTY" = yes ] && [ "$(basename "${SHELL:-}")" != zsh ]; then
+        printf '\nChange your default shell to Zsh? [y/N] ' > /dev/tty
+        IFS= read -r SHELL_REPLY < /dev/tty || SHELL_REPLY=
+    fi
+    case "$SHELL_REPLY" in
+        [Yy]|[Yy][Ee][Ss])
+            if ! command -v chsh >/dev/null 2>&1; then
+                echo "ERROR: chsh is unavailable; change your shell to Zsh manually." >&2
+                exit 1
+            fi
+            chsh -s "$(command -v zsh)" < /dev/tty
+            echo "  Default shell changed; start a new login session to apply."
+            ;;
+    esac
 fi
+
+if ! [ -f "$ZSH_RC" ] || ! grep -Fqx '. "$HOME/.kh/init" # kh environment' "$ZSH_RC"; then
+    printf '\n%s\n' '. "$HOME/.kh/init" # kh environment' >> "$ZSH_RC"
+    echo "  Enabled environment in $ZSH_RC"
+fi
+
+DOCKER_REPLY=
+if [ "$HAVE_TTY" = yes ]; then
+    printf '\nAdd your user to the docker group? This grants root-equivalent access. [y/N] ' > /dev/tty
+    IFS= read -r DOCKER_REPLY < /dev/tty || DOCKER_REPLY=
+fi
+case "$DOCKER_REPLY" in
+    [Yy]|[Yy][Ee][Ss])
+        sudo usermod -aG docker "$(id -un)"
+        echo "  Added user to docker group; start a new login session to apply."
+        ;;
+esac
 
 echo ""
 echo "=== Done! ==="
-echo "Type 'kh' (or open a new shell first) to activate your environment."
-echo ""
-
-echo "To add user to docker group, use: sudo usermod -aG docker $USER"
+echo 'Open a new shell, or run: . "$HOME/.kh/init"'
+if [ "$HAVE_TTY" = no ]; then
+    echo "No terminal available; skipped the optional shell and Docker prompts."
+fi
